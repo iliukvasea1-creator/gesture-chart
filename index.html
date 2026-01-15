@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>iPhone Hand Gesture</title>
+<title>iPhone Hand Gesture FIX</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -39,27 +39,31 @@ video {
 <body>
 
 <div id="status">TAP TO START</div>
-<video id="video" autoplay playsinline></video>
+<video id="video" autoplay playsinline muted></video>
 
 <script>
 const status = document.getElementById('status')
 const video = document.getElementById('video')
 
 let hands
-let streamStarted = false
+let running = false
 
-// ===== START CAMERA FIRST =====
+// ===== START CAMERA =====
 async function startCamera() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user' }
     })
     video.srcObject = stream
+
+    // IMPORTANT FOR iOS
+    await video.play()
+
     status.innerText = 'CAMERA OK'
     startHands()
   } catch (e) {
     status.innerText = 'CAMERA ERROR'
-    alert(e.message)
+    alert(e.name + ': ' + e.message)
   }
 }
 
@@ -72,9 +76,9 @@ function startHands() {
 
   hands.setOptions({
     maxNumHands: 1,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.6,
-    minTrackingConfidence: 0.6
+    modelComplexity: 0, // IMPORTANT FOR iOS
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
   })
 
   hands.onResults(res => {
@@ -92,27 +96,27 @@ function startHands() {
       thumb.y - index.y
     )
 
-    if (pinch < 0.06) {
+    if (pinch < 0.07) {
       status.innerText = '🤏 PINCH'
     } else {
       status.innerText = '✋ HAND'
     }
   })
 
-  processFrame()
+  running = true
+  requestAnimationFrame(loop)
 }
 
-// ===== PROCESS LOOP =====
-async function processFrame() {
-  if (!hands) return
+// ===== MAIN LOOP (CRITICAL FIX) =====
+async function loop() {
+  if (!running) return
   await hands.send({ image: video })
-  requestAnimationFrame(processFrame)
+  requestAnimationFrame(loop)
 }
 
-// ===== iOS USER GESTURE =====
+// ===== USER GESTURE REQUIRED =====
 document.body.addEventListener('click', () => {
-  if (!streamStarted) {
-    streamStarted = true
+  if (!running) {
     status.innerText = 'STARTING…'
     startCamera()
   }
