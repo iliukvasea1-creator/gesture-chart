@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>iPhone Hand Gesture FIX</title>
+<title>iPhone MediaPipe FINAL FIX</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -39,11 +39,11 @@ video {
 <body>
 
 <div id="status">TAP TO START</div>
-<video id="video" autoplay playsinline muted></video>
+<video id="video" playsinline muted></video>
 
 <script>
 const status = document.getElementById('status')
-const video = document.getElementById('video')
+const video  = document.getElementById('video')
 
 let hands
 let running = false
@@ -56,11 +56,13 @@ async function startCamera() {
     })
     video.srcObject = stream
 
-    // IMPORTANT FOR iOS
-    await video.play()
+    // CRITICAL FOR iOS
+    video.onloadedmetadata = async () => {
+      await video.play()
+      status.innerText = 'VIDEO READY'
+      initHands()
+    }
 
-    status.innerText = 'CAMERA OK'
-    startHands()
   } catch (e) {
     status.innerText = 'CAMERA ERROR'
     alert(e.name + ': ' + e.message)
@@ -68,7 +70,7 @@ async function startCamera() {
 }
 
 // ===== INIT MEDIAPIPE =====
-function startHands() {
+function initHands() {
   hands = new Hands({
     locateFile: f =>
       `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
@@ -76,7 +78,7 @@ function startHands() {
 
   hands.setOptions({
     maxNumHands: 1,
-    modelComplexity: 0, // IMPORTANT FOR iOS
+    modelComplexity: 0,
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5
   })
@@ -87,34 +89,31 @@ function startHands() {
       return
     }
 
-    const lm = res.multiHandLandmarks[0]
-    const thumb = lm[4]
-    const index = lm[8]
+    status.innerText = '✋ HAND DETECTED'
 
-    const pinch = Math.hypot(
-      thumb.x - index.x,
-      thumb.y - index.y
+    const lm = res.multiHandLandmarks[0]
+    const d = Math.hypot(
+      lm[4].x - lm[8].x,
+      lm[4].y - lm[8].y
     )
 
-    if (pinch < 0.07) {
+    if (d < 0.07) {
       status.innerText = '🤏 PINCH'
-    } else {
-      status.innerText = '✋ HAND'
     }
   })
 
   running = true
-  requestAnimationFrame(loop)
+  loop()
 }
 
-// ===== MAIN LOOP (CRITICAL FIX) =====
+// ===== FRAME LOOP =====
 async function loop() {
   if (!running) return
   await hands.send({ image: video })
   requestAnimationFrame(loop)
 }
 
-// ===== USER GESTURE REQUIRED =====
+// ===== USER GESTURE =====
 document.body.addEventListener('click', () => {
   if (!running) {
     status.innerText = 'STARTING…'
