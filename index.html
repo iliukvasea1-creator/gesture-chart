@@ -2,10 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
+<title>iPhone Hand Gesture</title>
 
-<title>Gesture Test iPhone</title>
-
-<!-- iOS REQUIRED -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 
@@ -13,7 +11,7 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: #0e0e0e;
+  background: #000;
   overflow: hidden;
 }
 
@@ -21,7 +19,7 @@ html, body {
   position: fixed;
   top: 10px;
   left: 10px;
-  color: #4ade80;
+  color: #00ff88;
   font-family: monospace;
   z-index: 10;
 }
@@ -30,79 +28,95 @@ video {
   position: fixed;
   right: 10px;
   bottom: 10px;
-  width: 140px;
-  opacity: 0.3;
+  width: 160px;
+  opacity: 0.35;
 }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 </head>
 
 <body>
 
-<div id="status">INIT…</div>
+<div id="status">TAP TO START</div>
 <video id="video" autoplay playsinline></video>
 
 <script>
 const status = document.getElementById('status')
 const video = document.getElementById('video')
 
-status.innerText = 'LOADING MEDIAPIPE…'
+let hands
+let streamStarted = false
 
-// ===== MEDIAPIPE HANDS =====
-const hands = new Hands({
-  locateFile: f =>
-    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
-})
-
-hands.setOptions({
-  maxNumHands: 1,
-  modelComplexity: 1,
-  minDetectionConfidence: 0.6,
-  minTrackingConfidence: 0.6
-})
-
-hands.onResults(res => {
-  if (!res.multiHandLandmarks) {
-    status.innerText = 'NO HAND'
-    return
+// ===== START CAMERA FIRST =====
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user' }
+    })
+    video.srcObject = stream
+    status.innerText = 'CAMERA OK'
+    startHands()
+  } catch (e) {
+    status.innerText = 'CAMERA ERROR'
+    alert(e.message)
   }
+}
 
-  const lm = res.multiHandLandmarks[0]
+// ===== INIT MEDIAPIPE =====
+function startHands() {
+  hands = new Hands({
+    locateFile: f =>
+      `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  })
 
-  const thumb = lm[4]
-  const index = lm[8]
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.6,
+    minTrackingConfidence: 0.6
+  })
 
-  const pinch = Math.hypot(
-    thumb.x - index.x,
-    thumb.y - index.y
-  )
+  hands.onResults(res => {
+    if (!res.multiHandLandmarks) {
+      status.innerText = 'NO HAND'
+      return
+    }
 
-  if (pinch < 0.06) {
-    status.innerText = '🤏 PINCH'
-  } else {
-    status.innerText = '✋ HAND DETECTED'
-  }
-})
+    const lm = res.multiHandLandmarks[0]
+    const thumb = lm[4]
+    const index = lm[8]
 
-// ===== CAMERA =====
-const camera = new Camera(video, {
-  onFrame: async () => {
-    await hands.send({ image: video })
-  },
-  width: 640,
-  height: 480,
-  facingMode: 'user' // фронтальная камера
-})
+    const pinch = Math.hypot(
+      thumb.x - index.x,
+      thumb.y - index.y
+    )
 
-// iOS needs user interaction
+    if (pinch < 0.06) {
+      status.innerText = '🤏 PINCH'
+    } else {
+      status.innerText = '✋ HAND'
+    }
+  })
+
+  processFrame()
+}
+
+// ===== PROCESS LOOP =====
+async function processFrame() {
+  if (!hands) return
+  await hands.send({ image: video })
+  requestAnimationFrame(processFrame)
+}
+
+// ===== iOS USER GESTURE =====
 document.body.addEventListener('click', () => {
-  status.innerText = 'CAMERA STARTING…'
-  camera.start()
+  if (!streamStarted) {
+    streamStarted = true
+    status.innerText = 'STARTING…'
+    startCamera()
+  }
 }, { once: true })
-
-status.innerText = 'TAP SCREEN TO START CAMERA'
 </script>
 
 </body>
