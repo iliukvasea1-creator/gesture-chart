@@ -1,79 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+
+<title>Gesture Test iPhone</title>
+
+<!-- iOS REQUIRED -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #0e0e0e;
+  overflow: hidden;
+}
+
+#status {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  color: #4ade80;
+  font-family: monospace;
+  z-index: 10;
+}
+
+video {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  width: 140px;
+  opacity: 0.3;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+</head>
+
+<body>
+
+<div id="status">INIT…</div>
+<video id="video" autoplay playsinline></video>
+
 <script>
+const status = document.getElementById('status')
 const video = document.getElementById('video')
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
 
-function resize(){
-  canvas.width = window.innerWidth
-  canvas.height = window.innerHeight
-}
-resize()
-window.addEventListener('resize', resize)
+status.innerText = 'LOADING MEDIAPIPE…'
 
-// ===== MOCK DATA =====
-const data = Array.from({length: 300}, (_, i) =>
-  300 + Math.sin(i / 10) * 60
-)
-
-let offsetX = canvas.width / 2
-let scale = 1
-const levels = []
-
-// ===== DRAW =====
-function draw(){
-  ctx.setTransform(-1, 0, 0, 1, canvas.width, 0) // MIRROR FIX
-  ctx.clearRect(0,0,canvas.width,canvas.height)
-
-  ctx.strokeStyle = '#4ade80'
-  ctx.lineWidth = 2
-  ctx.beginPath()
-
-  data.forEach((p,i)=>{
-    const x = i * 6 * scale + offsetX
-    const y = canvas.height - p
-    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y)
-  })
-  ctx.stroke()
-
-  ctx.setLineDash([6,6])
-  ctx.strokeStyle = '#facc15'
-  levels.forEach(y=>{
-    ctx.beginPath()
-    ctx.moveTo(0,y)
-    ctx.lineTo(canvas.width,y)
-    ctx.stroke()
-  })
-  ctx.setLineDash([])
-
-  ctx.setTransform(1,0,0,1,0,0)
-}
-
-// ===== SMOOTHING =====
-let smoothX = 0.5
-let smoothY = 0.5
-function smooth(val, target){
-  return val * 0.8 + target * 0.2
-}
-
-// ===== GESTURES =====
-function detectGesture(lm){
-  const thumb = lm[4]
-  const index = lm[8]
-  const middle = lm[12]
-
-  const pinchDist = Math.hypot(
-    thumb.x - index.x,
-    thumb.y - index.y
-  )
-
-  if (pinchDist < 0.06) return 'PINCH'
-  if (Math.abs(index.y - middle.y) < 0.05) return 'ZOOM'
-  return 'PAN'
-}
-
-let lastPinch = 0
-
-// ===== MEDIAPIPE =====
+// ===== MEDIAPIPE HANDS =====
 const hands = new Hands({
   locateFile: f =>
     `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
@@ -86,49 +63,47 @@ hands.setOptions({
   minTrackingConfidence: 0.6
 })
 
-hands.onResults(res=>{
-  if(!res.multiHandLandmarks) return
+hands.onResults(res => {
+  if (!res.multiHandLandmarks) {
+    status.innerText = 'NO HAND'
+    return
+  }
 
   const lm = res.multiHandLandmarks[0]
 
-  // MIRROR COORD FIX
-  const x = 1 - lm[0].x
-  const y = lm[0].y
+  const thumb = lm[4]
+  const index = lm[8]
 
-  smoothX = smooth(smoothX, x)
-  smoothY = smooth(smoothY, y)
+  const pinch = Math.hypot(
+    thumb.x - index.x,
+    thumb.y - index.y
+  )
 
-  const g = detectGesture(lm)
-
-  if(g === 'PAN'){
-    offsetX += (smoothX - 0.5) * 40
+  if (pinch < 0.06) {
+    status.innerText = '🤏 PINCH'
+  } else {
+    status.innerText = '✋ HAND DETECTED'
   }
-
-  if(g === 'ZOOM'){
-    scale += (lm[8].y - lm[12].y) * 0.12
-    scale = Math.max(0.4, Math.min(scale, 4))
-  }
-
-  if(g === 'PINCH'){
-    const now = Date.now()
-    if(now - lastPinch > 600){
-      levels.push(smoothY * canvas.height)
-      lastPinch = now
-      if(navigator.vibrate) navigator.vibrate(15)
-    }
-  }
-
-  draw()
 })
 
 // ===== CAMERA =====
-const camera = new Camera(video,{
-  onFrame: async()=>await hands.send({image: video}),
+const camera = new Camera(video, {
+  onFrame: async () => {
+    await hands.send({ image: video })
+  },
   width: 640,
   height: 480,
-  facingMode: 'user' // FRONT CAMERA FIX
+  facingMode: 'user' // фронтальная камера
 })
 
-camera.start()
-draw()
+// iOS needs user interaction
+document.body.addEventListener('click', () => {
+  status.innerText = 'CAMERA STARTING…'
+  camera.start()
+}, { once: true })
+
+status.innerText = 'TAP SCREEN TO START CAMERA'
 </script>
+
+</body>
+</html>
